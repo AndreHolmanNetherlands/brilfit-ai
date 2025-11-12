@@ -1,5 +1,3 @@
 [server]
 enableCORS = false
 enableXsrfProtection = false
-cookieSameSite = "none"
-cookieSecure = true
