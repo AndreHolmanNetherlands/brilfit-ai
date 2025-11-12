@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 from PIL import Image
 import mediapipe as mp
+from io import BytesIO  # Dit was missend – nu bovenaan!
 
 # MediaPipe voor gezichtsanalyse
 mp_face_mesh = mp.solutions.face_mesh
@@ -67,7 +68,7 @@ def detect_face_shape(image):
         lm = results.multi_face_landmarks[0].landmark
         width = abs(lm[33].x - lm[263].x)
         height = abs(lm[10].y - lm[152].y)
-        ratio = height / width
+        ratio = height / width if width > 0 else 1
         if ratio > 1.5: return "oblong"
         elif ratio < 1.1: return "rond"
         else: return "ovaal"
@@ -96,8 +97,8 @@ def virtual_try_on(face_image, bril_url, sizes):
         x_start = x + (w - bril_resized.width) // 2
         y_start = y + int(h * 0.3)
         
-        for i in range(bril_resized.height):
-            for j in range(bril_resized.width):
+        for i in range(min(bril_resized.height, face.shape[0] - y_start)):
+            for j in range(min(bril_resized.width, face.shape[1] - x_start)):
                 if 0 <= y_start + i < face.shape[0] and 0 <= x_start + j < face.shape[1]:
                     alpha = bril_resized.getpixel((j, i))[3] / 255.0
                     face[y_start + i, x_start + j] = (
@@ -108,16 +109,19 @@ def virtual_try_on(face_image, bril_url, sizes):
                     )
     return Image.fromarray(face)
 
-from io import BytesIO
-
-st.title("BrilFit AI – Elzer Optiek")
+st.title("🕶️ BrilFit AI – Elzer Optiek")
 st.write("Upload een selfie of doe de quiz voor persoonlijk briladvies!")
 
 if st.button("Vernieuw producten uit winkel"):
     st.cache_data.clear()
     st.rerun()
 
+st.info(f"Aantal beschikbare brillen: {len(COLLECTIE)}")
+
 input_type = st.radio("Kies je methode:", ("Foto uploaden", "Quiz"))
+
+shape = "ovaal"  # Default
+face_image = None
 
 if input_type == "Foto uploaden":
     uploaded = st.file_uploader("Upload een duidelijke selfie (recht van voren)", type=["jpg", "png"])
@@ -125,10 +129,10 @@ if input_type == "Foto uploaden":
         face_image = Image.open(uploaded)
         st.image(face_image, caption="Jouw foto", width=200)
         shape = detect_face_shape(face_image)
-        st.write(f"**Gezichtsanalyse**: {shape.capitalize()} gezicht")
+        st.success(f"**Gezichtsanalyse**: {shape.capitalize()} gezicht")
 else:
     shape = st.selectbox("Wat is je gezichtsvorm?", ["ovaal", "rond", "rechthoekig", "oblong"])
-    st.write(f"**Gekozen**: {shape.capitalize()}")
+    st.success(f"**Gekozen**: {shape.capitalize()}")
 
 if st.button("Zoek mijn perfecte bril"):
     recs = get_recommendations(shape)
@@ -137,13 +141,13 @@ if st.button("Zoek mijn perfecte bril"):
         for rec in recs:
             col1, col2 = st.columns([1, 2])
             with col1:
-                st.image(rec["image_url"], width=120)
+                st.image(rec["image_url"], width=120, use_column_width=True)
                 st.write(f"**{rec['name']}**")
                 st.write(f"€{rec['price']}")
                 st.markdown(f"[Kopen ›]({rec['url']})")
             with col2:
-                if input_type == "Foto uploaden" and 'face_image' in locals():
+                if face_image:
                     try_on = virtual_try_on(face_image, rec["image_url"], rec["sizes"])
-                    st.image(try_on, caption=f"Try-on: {rec['name']}")
+                    st.image(try_on, caption=f"Try-on: {rec['name']}", width=250)
     else:
-        st.info("Geen brillen gevonden. Toon voorbeeld.")
+        st.info("Geen matches gevonden – probeer een andere vorm!")
