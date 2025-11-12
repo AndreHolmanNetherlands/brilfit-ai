@@ -4,14 +4,9 @@ import os
 import cv2
 import numpy as np
 from PIL import Image
-import mediapipe as mp
-from io import BytesIO  # Dit was missend – nu bovenaan!
+from io import BytesIO
 
-# MediaPipe voor gezichtsanalyse
-mp_face_mesh = mp.solutions.face_mesh
-face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=True)
-
-# WooCommerce instellingen (worden later via Digital Ocean ingesteld)
+# WooCommerce instellingen
 BASE_URL = os.getenv("WOOCOMMERCE_URL", "https://elzeroptiek.nl")
 CONSUMER_KEY = os.getenv("WOOCOMMERCE_KEY")
 CONSUMER_SECRET = os.getenv("WOOCOMMERCE_SECRET")
@@ -62,16 +57,18 @@ def fetch_products_from_wc():
 COLLECTIE = fetch_products_from_wc()
 
 def detect_face_shape(image):
-    img_rgb = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-    results = face_mesh.process(img_rgb)
-    if results.multi_face_landmarks:
-        lm = results.multi_face_landmarks[0].landmark
-        width = abs(lm[33].x - lm[263].x)
-        height = abs(lm[10].y - lm[152].y)
-        ratio = height / width if width > 0 else 1
-        if ratio > 1.5: return "oblong"
-        elif ratio < 1.1: return "rond"
-        else: return "ovaal"
+    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+    if len(faces) > 0:
+        (x, y, w, h) = faces[0]
+        aspect_ratio = w / h
+        if aspect_ratio > 0.8:
+            return "ovaal"
+        elif aspect_ratio < 0.7:
+            return "rond"
+        else:
+            return "rechthoekig"
     return "ovaal"
 
 def get_recommendations(shape, style_pref=""):
