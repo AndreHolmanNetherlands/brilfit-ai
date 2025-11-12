@@ -2,5 +2,4 @@ streamlit
 opencv-python
 pillow
 numpy
-mediapipe
 requests
