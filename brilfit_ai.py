@@ -19,33 +19,40 @@ def get_products():
         r = requests.get(
             f"{BASE_URL}/wp-json/wc/v3/products",
             auth=(KEY, SECRET),
-            params={"per_page": 50, "status": "publish", "category": "brillen"},  # optioneel: alleen brillen
+            params={"per_page": 20, "status": "publish"},
             timeout=15
         )
         if r.status_code == 200:
             data = r.json()
             products = []
             for p in data:
-                img = p.get("images", [{}])[0].get("src", "") if p.get("images") else ""
+                # Juiste afbeelding ophalen
+                img_url = ""
+                if p.get("images") and len(p["images"]) > 0:
+                    img_url = p["images"][0]["src"]
+                
+                # Meta data
                 meta = {m["key"]: m["value"] for m in p.get("meta_data", [])}
                 style = meta.get("style", "ovaal").lower()
+                lens_width = int(meta.get("lens_width", 50))
+                
                 products.append({
                     "name": p["name"],
-                    "image": img or "https://via.placeholder.com/200x100?text=Bril",
-                    "price": p["price"] or "0",
-                    "url": p["permalink"],
+                    "image": img_url or "https://via.placeholder.com/200x100/cccccc/666666?text=Bril",
+                    "price": p.get("price", "0"),
+                    "url": p.get("permalink", "#"),
                     "style": style,
-                    "lens_width": int(meta.get("lens_width", 50))
+                    "lens_width": lens_width
                 })
-            return [p for p in products if p["image"] != ""][:12]  # max 12
+            return [p for p in products if p["image"].startswith("http")][:6]
     except Exception as e:
-        st.error(f"Fout met WooCommerce: {e}")
+        st.error(f"WooCommerce fout: {e}")
     
-    # Fallback als API faalt
+    # Fallback met echte afbeeldingen van jouw site
     return [
-        {"name": "Dutz 2270", "image": "https://elzeroptiek.nl/wp-content/uploads/2024/09/dutz-2270-25-600x600.jpg", "price": "189", "url": "https://elzeroptiek.nl", "style": "rond", "lens_width": 52},
-        {"name": "BBIG 243", "image": "https://elzeroptiek.nl/wp-content/uploads/2024/09/bbig-243-465-600x600.jpg", "price": "149", "url": "https://elzeroptiek.nl", "style": "rechthoekig", "lens_width": 48},
-        {"name": "Prodesign 1791", "image": "https://elzeroptiek.nl/wp-content/uploads/2024/09/prodesign-1791-6031-600x600.jpg", "price": "229", "url": "https://elzeroptiek.nl", "style": "ovaal", "lens_width": 54}
+        {"name": "Dutz 2270", "image": "https://elzeroptiek.nl/wp-content/uploads/2024/09/dutz-2270-25-600x600.jpg", "price": "189", "url": "https://elzeroptiek.nl/product/dutz-2270-25/", "style": "rond", "lens_width": 52},
+        {"name": "BBIG 243", "image": "https://elzeroptiek.nl/wp-content/uploads/2024/09/bbig-243-465-600x600.jpg", "price": "149", "url": "https://elzeroptiek.nl/product/bbig-243-465/", "style": "rechthoekig", "lens_width": 48},
+        {"name": "Prodesign 1791", "image": "https://elzeroptiek.nl/wp-content/uploads/2024/09/prodesign-1791-6031-600x600.jpg", "price": "229", "url": "https://elzeroptiek.nl/product/prodesign-1791-6031/", "style": "ovaal", "lens_width": 54}
     ]
 
 products = get_products()
@@ -53,13 +60,16 @@ products = get_products()
 # === Try-on (Pillow) ===
 def try_on(face_img, bril_url, lens_width=50):
     try:
-        bril = Image.open(BytesIO(requests.get(bril_url, timeout=10).content)).convert("RGBA")
+        bril_resp = requests.get(bril_url, timeout=10)
+        if bril_resp.status_code != 200:
+            raise Exception("Afbeelding niet gevonden")
+        bril = Image.open(BytesIO(bril_resp.content)).convert("RGBA")
     except:
         bril = Image.new("RGBA", (200, 80), (200,200,200,180))
     
     face = face_img.copy().convert("RGBA")
     w, h = face.size
-    scale = (w * 0.65) / lens_width
+    scale = (w * 0.65) / max(lens_width, 40)
     new_w = int(bril.width * scale)
     new_h = int(bril.height * scale)
     bril = bril.resize((new_w, new_h), Image.Resampling.LANCZOS)
@@ -72,27 +82,38 @@ def try_on(face_img, bril_url, lens_width=50):
 # === App ===
 st.set_page_config(page_title="BrilFit AI – Elzer Optiek", layout="centered")
 st.title("BrilFit AI")
-st.write("Upload een selfie en zie direct welke bril bij jou past!")
+st.markdown("### Upload een selfie en zie direct welke bril bij jou past!")
 
-uploaded = st.file_uploader("Foto (recht van voren)", type=["jpg", "png", "jpeg"])
+# File uploader met unieke key om 400 te voorkomen
+uploaded_file = st.file_uploader(
+    "Foto (recht van voren, goed licht)",
+    type=["jpg", "jpeg", "png"],
+    key="photo_uploader",
+    help="Max 5MB"
+)
 
-if uploaded:
-    img = Image.open(uploaded)
-    st.image(img, width=250, caption="Jouw selfie")
+face_img = None
+if uploaded_file is not None:
+    try:
+        face_img = Image.open(uploaded_file)
+        st.image(face_img, width=250, caption="Jouw selfie")
+    except Exception as e:
+        st.error(f"Fout bij laden foto: {e}")
 
 if st.button("Zoek mijn perfecte bril", type="primary"):
     if not products:
-        st.error("Geen brillen gevonden – check WooCommerce API keys")
+        st.error("Geen brillen gevonden – controleer API keys")
     else:
-        st.success(f"{len(products)} brillen geladen!")
+        st.success(f"**{len(products)} brillen geladen uit jouw winkel!**")
         for p in products:
             col1, col2 = st.columns([1, 1])
             with col1:
-                st.image(p["image"], width=140)
-                st.write(f"**{p['name']}**")
-                st.write(f"€ {p['price']}")
+                st.image(p["image"], width=150, use_column_width=True)
+                st.markdown(f"**{p['name']}**")
+                st.write(f"**€ {p['price']}**")
                 st.markdown(f"[Direct kopen ›]({p['url']})")
             with col2:
-                if uploaded:
-                    result = try_on(img, p["image"], p["lens_width"])
-                    st.image(result, caption=f"Try-on: {p['name']}", width=250)
+                if face_img:
+                    try:
+                        result = try_on(face_img, p["image"], p["lens_width"])
+                       
