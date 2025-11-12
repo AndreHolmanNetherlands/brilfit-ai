@@ -15,4 +15,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 8080
 
 # Start Streamlit op de juiste poort
-CMD ["streamlit", "run", "brilfit_ai.py", "--server.port=8080", "--server.address=0.0.0.0", "--server.headless=true"]
+CMD ["streamlit", "run", "brilfit_ai.py", "--server.port=8080", "--server.address=0.0.0.0", "--server.headless=true", "--server.enableCORS=false", "--server.enableXsrfProtection=false"]
