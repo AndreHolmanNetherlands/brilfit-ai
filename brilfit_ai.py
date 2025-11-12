@@ -116,4 +116,8 @@ if st.button("Zoek mijn perfecte bril", type="primary"):
                 if face_img:
                     try:
                         result = try_on(face_img, p["image"], p["lens_width"])
-                       
+                        st.image(result, caption=f"Try-on: {p['name']}", width=250)
+                    except Exception as e:
+                        st.warning(f"Try-on mislukt: {e}")
+                else:
+                    st.info("Upload een foto om try-on te zien")
