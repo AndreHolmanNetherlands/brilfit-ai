@@ -1,15 +1,17 @@
-FROM python:3.12-slim
+FROM python:3.12-buster  # Buster voor betere libGL compat (niet slim)
 
-# Installeer system dependencies voor OpenCV (libGL + video support)
+# Installeer alle OpenCV dependencies (volledige fix uit SO/GitHub 2025)
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
-    ffmpeg \
     libsm6 \
     libxext6 \
     libxrender-dev \
+    libfontconfig1 \
     libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
+    ffmpeg \
+    wget \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 WORKDIR /app
 
